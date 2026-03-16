@@ -1,7 +1,7 @@
-Flask
-Flask-CORS
+flask
+flask-cors
+tensorflow-cpu
 opencv-python-headless
 numpy
-tensorflow-cpu
+gunicorn
 mysql-connector-python
-Werkzeug

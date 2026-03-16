@@ -1,7 +1,7 @@
 flask
 flask-cors
-tensorflow-cpu
+tensorflow-cpu==2.15.0
 opencv-python-headless
-numpy
+numpy<2.0.0
 mysql-connector-python
 gunicorn

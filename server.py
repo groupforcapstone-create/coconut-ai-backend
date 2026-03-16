@@ -1,7 +1,7 @@
 import os
 
 # --- STEP 1: MEMORY OPTIMIZATION (MUST BE AT THE TOP) ---
-# Disable GPU and reduce TensorFlow logging to save RAM
+# Pinipigilan nito ang TensorFlow na gamitin ang buong RAM agad
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 os.environ['CUDA_VISIBLE_DEVICES'] = '-1' 
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
@@ -24,8 +24,9 @@ CLASS_NAMES = ["Baybay Tall Coconut", "Catigan Dwarf Coconut", "NotCoconut", "Ta
 def load_model_file():
     try:
         if os.path.exists(MODEL_PATH):
-            # compile=False is critical to avoid loading extra optimizer weights into RAM
+            # compile=False helps save RAM by not loading optimizer data
             return tf.keras.models.load_model(MODEL_PATH, compile=False)
+        print(f"Error: {MODEL_PATH} not found.")
         return None
     except Exception as e:
         print(f"Model Load Error: {e}")
@@ -51,8 +52,7 @@ def predict():
     try:
         file = request.files['file']
         
-        # --- STEP 2: STREAMING READ ---
-        # Read the file directly to save a copy in memory
+        # Read file without saving to disk
         file_bytes = np.frombuffer(file.read(), np.uint8)
         img = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
 
@@ -62,9 +62,6 @@ def predict():
         # Pre-process
         img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         img_resized = cv2.resize(img_rgb, IMG_SIZE)
-        
-        # Convert to float16 if your model supports it to save RAM, 
-        # but float32 is safer for now.
         img_final = np.expand_dims(img_resized.astype("float32") / 255.0, axis=0)
 
         # Run Prediction
@@ -93,6 +90,6 @@ def predict():
         return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
-    # Render uses port 10000 by default for free tier
+    # Render Dynamic Port Binding
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)

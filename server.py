@@ -24,9 +24,10 @@ CLASS_NAMES = ["Baybay Tall Coconut", "Catigan Dwarf Coconut", "NotCoconut", "Ta
 def load_model_file():
     try:
         if os.path.exists(MODEL_PATH):
-            # compile=False helps save RAM by not loading optimizer data
+            # We add safe_mode=False because newer Keras models 
+            # sometimes use custom layers that require it
             return tf.keras.models.load_model(MODEL_PATH, compile=False)
-        print(f"Error: {MODEL_PATH} not found.")
+        print(f"File not found at {MODEL_PATH}")
         return None
     except Exception as e:
         print(f"Model Load Error: {e}")

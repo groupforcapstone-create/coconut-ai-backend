@@ -1,8 +1,7 @@
-flask
-flask-cors
-tensorflow-cpu>=2.16.1
-keras>=3.0.0
-opencv-python-headless
-numpy<2.0.0
-mysql-connector-python
-gunicorn
+Flask==2.3.3
+Flask-CORS==4.0.0
+opencv-python==4.8.1.78
+numpy==1.24.3
+tensorflow==2.13.0
+mysql-connector-python==8.0.33
+Werkzeug==2.3.7

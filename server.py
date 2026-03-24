@@ -10,14 +10,14 @@ import mysql.connector
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from datetime import datetime
-import threading # Para sa background DB saving
+import threading
 
 app = Flask(__name__)
-# Enable CORS para sa Flutter App at Laravel Dashboard
 CORS(app)
 
 # --- CONFIGURATION ---
-MODEL_PATH = "coconut_model_v2_ultra.h5" 
+# Gamitin ang .tflite file para iwas crash sa Render
+MODEL_PATH = "coconut_model.tflite" 
 IMG_SIZE = (224, 224)
 CLASS_NAMES = ["Baybay Tall Coconut", "Catigan Dwarf Coconut", "NotCoconut", "Tacunan Dwarf Coconut"]
 
@@ -28,30 +28,26 @@ db_config = {
     "password": "Wowgaling@12345",
     "database": "u914267632_coconutproject", 
     "port": 3306,
-    "connect_timeout": 5 # Binabaan para sa faster failover
+    "connect_timeout": 10 
 }
 
-# --- LOAD AI MODEL ---
-model = None
+# --- LOAD TFLITE MODEL ---
+print("⏳ Loading TFLite Model... very lightweight!")
+try:
+    interpreter = tf.lite.Interpreter(model_path=MODEL_PATH)
+    interpreter.allocate_tensors()
 
-def get_model():
-    global model
-    if model is None:
-        try:
-            print("⏳ Loading AI Model... please wait.")
-            # compile=False saves memory during loading
-            model = tf.keras.models.load_model(MODEL_PATH, compile=False)
-            print("✅ Model loaded successfully!")
-        except Exception as e:
-            print(f"❌ Model Load Error: {e}")
-    return model
+    # Kunin ang input at output details ng model
+    input_details = interpreter.get_input_details()
+    output_details = interpreter.get_output_details()
+    print("✅ TFLite Model loaded successfully!")
+except Exception as e:
+    print(f"❌ TFLite Load Error: {e}")
+    interpreter = None
 
-# Initialize model on startup
-get_model()
-
-# --- DATABASE LOGIC (ASYNC READY) ---
+# --- DATABASE LOGIC (ASYNC) ---
 def save_to_db_worker(variety, confidence, address):
-    """Worker function para i-save sa DB nang hindi naghihintay ang API response"""
+    """Saves to DB in the background to prevent API lag"""
     try:
         connection = mysql.connector.connect(**db_config)
         cursor = connection.cursor()
@@ -61,7 +57,7 @@ def save_to_db_worker(variety, confidence, address):
         connection.commit()
         cursor.close()
         connection.close()
-        print(f"✅ DB Sync Success: {variety} logged to Admin Portal.")
+        print(f"✅ DB Sync Success: {variety} logged.")
     except Exception as e:
         print(f"❌ Database Sync Error: {e}")
 
@@ -69,20 +65,16 @@ def save_to_db_worker(variety, confidence, address):
 
 @app.route("/", methods=["GET"])
 def health_check():
-    """Health check endpoint para sa Real-Time AI Monitor ng Admin Portal"""
     return jsonify({
         "status": "success", 
-        "ai_model_status": "Live",
+        "ai_model_status": "Live (TFLite)",
         "database": "Remote Connected",
-        "timestamp": datetime.now().isoformat(),
-        "message": "Coconut AI Server is Operational"
+        "timestamp": datetime.now().isoformat()
     }), 200
 
 @app.route("/predict", methods=["POST"])
 def predict():
-    """Main scanning route para sa Flutter App"""
-    ai_model = get_model()
-    if ai_model is None:
+    if interpreter is None:
         return jsonify({"error": "Model not loaded"}), 500
     
     if 'file' not in request.files:
@@ -103,10 +95,12 @@ def predict():
         img_resized = cv2.resize(img_rgb, IMG_SIZE)
         img_final = np.expand_dims(img_resized.astype("float32") / 255.0, axis=0)
 
-        # 2. Run Prediction
-        preds = ai_model.predict(img_final, verbose=0)[0]
-        
-        # 3. Format Top Predictions
+        # 2. Run TFLite Prediction (Inference)
+        interpreter.set_tensor(input_details[0]['index'], img_final)
+        interpreter.invoke()
+        preds = interpreter.get_tensor(output_details[0]['index'])[0]
+
+        # 3. Format Predictions
         top_predictions = []
         for i in range(len(CLASS_NAMES)):
             top_predictions.append({
@@ -130,11 +124,10 @@ def predict():
                 "definition": "The object does not match any known coconut seedlings."
             })
 
-        # 5. ASYNC DB SAVE: I-save sa DB gamit ang Threading
-        # Para mabilis ang response sa App kahit mabagal ang MySQL
-        thread = threading.Thread(target=save_to_db_worker, args=(label, confidence, address))
-        thread.start()
+        # 5. Background DB Save
+        threading.Thread(target=save_to_db_worker, args=(label, confidence, address)).start()
 
+        # 6. Final Response
         return jsonify({
             "status": "success",
             "variety_name": label,
@@ -150,8 +143,7 @@ def predict():
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
-    # Sa Render, huwag mong palitan ang port dito. 
-    # Gamitin ang Environment Variable na 'PORT' sa Dashboard.
-    port = int(os.environ.get("PORT", 1000)) 
-    print(f"🚀 AI Server starting on port {port}")
+    # Gamitin ang PORT environment variable para sa Render
+    port = int(os.environ.get("PORT", 10000)) 
+    print(f"🚀 TFLite AI Server starting on port {port}")
     app.run(host='0.0.0.0', port=port, debug=False)

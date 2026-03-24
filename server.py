@@ -1,7 +1,7 @@
 import os
 # --- STEP 1: MEMORY OPTIMIZATION (MUST BE AT THE TOP) ---
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-os.environ['CUDA_VISIBLE_DEVICES'] = '-1' # Force CPU only for Render
+os.environ['CUDA_VISIBLE_DEVICES'] = '-1' # Force CPU only for Render Free Tier
 
 import cv2
 import numpy as np
@@ -12,6 +12,7 @@ from flask_cors import CORS
 from datetime import datetime
 
 app = Flask(__name__)
+# Enable CORS para sa Flutter App at Laravel Dashboard
 CORS(app)
 
 # --- CONFIGURATION ---
@@ -19,7 +20,7 @@ MODEL_PATH = "coconut_model_v2_ultra.h5"
 IMG_SIZE = (224, 224)
 CLASS_NAMES = ["Baybay Tall Coconut", "Catigan Dwarf Coconut", "NotCoconut", "Tacunan Dwarf Coconut"]
 
-# Remote Database Config (Naka-hardcode na dito base sa binigay mo)
+# Remote Database Config (Hostinger MySQL)
 db_config = {
     "host": "148.222.53.5",
     "user": "u914267632_group4",
@@ -30,21 +31,21 @@ db_config = {
 }
 
 # --- LOAD AI MODEL ---
-# Ginawa nating global para isang beses lang i-load
 model = None
 
 def get_model():
     global model
     if model is None:
         try:
-            print("⏳ Loading AI Model...")
+            print("⏳ Loading AI Model... please wait.")
+            # compile=False saves memory during loading
             model = tf.keras.models.load_model(MODEL_PATH, compile=False)
             print("✅ Model loaded successfully!")
         except Exception as e:
             print(f"❌ Model Load Error: {e}")
     return model
 
-# I-load ang model agad pagka-start ng server
+# Initialize model on startup
 get_model()
 
 # --- DATABASE LOGIC ---
@@ -52,13 +53,14 @@ def save_to_db(variety, confidence, address):
     try:
         connection = mysql.connector.connect(**db_config)
         cursor = connection.cursor()
+        # Query para sa 'detections' table ng Laravel
         query = """INSERT INTO detections (variety_name, confidence, address, created_at, updated_at) 
                    VALUES (%s, %s, %s, NOW(), NOW())"""
         cursor.execute(query, (variety, confidence, address))
         connection.commit()
         cursor.close()
         connection.close()
-        print(f"✅ Saved to DB: {variety}")
+        print(f"✅ DB Sync Success: {variety} saved to MySQL.")
     except Exception as e:
         print(f"❌ Database Error: {e}")
 
@@ -66,14 +68,18 @@ def save_to_db(variety, confidence, address):
 
 @app.route("/", methods=["GET"])
 def health_check():
+    """Para sa Heartbeat monitor ng Laravel Admin Dashboard"""
     return jsonify({
-        "status": "Server is Live", 
+        "status": "success", 
+        "ai_model_status": "Live",
         "database": "Remote Connected",
-        "timestamp": datetime.now().isoformat()
+        "timestamp": datetime.now().isoformat(),
+        "message": "Coconut AI Server is Operational"
     }), 200
 
 @app.route("/predict", methods=["POST"])
 def predict():
+    """Main scanning route para sa Flutter App"""
     ai_model = get_model()
     if ai_model is None:
         return jsonify({"error": "Model not loaded"}), 500
@@ -84,7 +90,7 @@ def predict():
     address = request.form.get('address', 'Unknown Location')
 
     try:
-        # 1. Process Image (Memory efficient way)
+        # 1. Process Image
         file = request.files['file']
         file_bytes = np.frombuffer(file.read(), np.uint8)
         img = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
@@ -96,7 +102,7 @@ def predict():
         # 2. Run Prediction
         preds = ai_model.predict(img_final, verbose=0)[0]
         
-        # 3. Format Predictions for UI
+        # 3. Format Top Predictions
         top_predictions = []
         for i in range(len(CLASS_NAMES)):
             top_predictions.append({
@@ -109,7 +115,7 @@ def predict():
         label = CLASS_NAMES[idx]
         confidence = float(preds[idx]) * 100
         
-        # 4. Handle "Not a Coconut"
+        # 4. Filter "Not a Coconut"
         if label == "NotCoconut":
             return jsonify({
                 "status": "success",
@@ -120,7 +126,7 @@ def predict():
                 "definition": "The object does not match any known coconut seedlings."
             })
 
-        # 5. Save to DB
+        # 5. Save detection result to DB
         save_to_db(label, round(confidence, 2), address)
 
         return jsonify({
@@ -138,6 +144,8 @@ def predict():
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
-    # --- IMPORTANT FOR RENDER ---
+    # Default port set to 8001 (for local)
+    # Render will override this automatically using its own PORT env
     port = int(os.environ.get("PORT", 8001)) 
+    print(f"🚀 AI Server starting on port {port}")
     app.run(host='0.0.0.0', port=port, debug=False)

@@ -144,6 +144,6 @@ def predict():
 
 if __name__ == '__main__':
     # Gamitin ang PORT environment variable para sa Render
-    port = int(os.environ.get("PORT", 10000)) 
+    port = int(os.environ.get("PORT", 1000)) 
     print(f"🚀 TFLite AI Server starting on port {port}")
     app.run(host='0.0.0.0', port=port, debug=False)

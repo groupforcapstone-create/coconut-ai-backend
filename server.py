@@ -16,8 +16,8 @@ app = Flask(__name__)
 CORS(app)
 
 # --- CONFIGURATION ---
-# Gamitin ang .tflite file para iwas crash sa Render
-MODEL_PATH = "coconut_model.tflite" 
+# Ginagamit na ang bagong convert na TFLite model file
+MODEL_PATH = "coconut_model2.tflite" 
 IMG_SIZE = (224, 224)
 CLASS_NAMES = ["Baybay Tall Coconut", "Catigan Dwarf Coconut", "NotCoconut", "Tacunan Dwarf Coconut"]
 
@@ -32,15 +32,15 @@ db_config = {
 }
 
 # --- LOAD TFLITE MODEL ---
-print("⏳ Loading TFLite Model... very lightweight!")
+print(f"⏳ Loading New TFLite Model from {MODEL_PATH}... very lightweight!")
 try:
     interpreter = tf.lite.Interpreter(model_path=MODEL_PATH)
     interpreter.allocate_tensors()
 
-    # Kunin ang input at output details ng model
+    # Kunin ang input at output details ng bagong model
     input_details = interpreter.get_input_details()
     output_details = interpreter.get_output_details()
-    print("✅ TFLite Model loaded successfully!")
+    print("✅ New TFLite Model loaded successfully!")
 except Exception as e:
     print(f"❌ TFLite Load Error: {e}")
     interpreter = None
@@ -67,7 +67,7 @@ def save_to_db_worker(variety, confidence, address):
 def health_check():
     return jsonify({
         "status": "success", 
-        "ai_model_status": "Live (TFLite)",
+        "ai_model_status": "Live (New TFLite Model)",
         "database": "Remote Connected",
         "timestamp": datetime.now().isoformat()
     }), 200
@@ -75,7 +75,7 @@ def health_check():
 @app.route("/predict", methods=["POST"])
 def predict():
     if interpreter is None:
-        return jsonify({"error": "Model not loaded"}), 500
+        return jsonify({"error": "Model not loaded properly on the server"}), 500
     
     if 'file' not in request.files:
         return jsonify({"error": "No image sent"}), 400
@@ -93,6 +93,8 @@ def predict():
 
         img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         img_resized = cv2.resize(img_rgb, IMG_SIZE)
+        
+        # Siguraduhing ang data type ay float32 at naka-normalize (0 hanggang 1)
         img_final = np.expand_dims(img_resized.astype("float32") / 255.0, axis=0)
 
         # 2. Run TFLite Prediction (Inference)
@@ -107,6 +109,8 @@ def predict():
                 "label": "Not a Coconut" if CLASS_NAMES[i] == "NotCoconut" else CLASS_NAMES[i],
                 "confidence": round(float(preds[i]) * 100, 2)
             })
+        
+        # I-sort mula pinakamataas na confidence hanggang pinakamababa
         top_predictions.sort(key=lambda x: x['confidence'], reverse=True)
 
         idx = np.argmax(preds)
@@ -124,10 +128,10 @@ def predict():
                 "definition": "The object does not match any known coconut seedlings."
             })
 
-        # 5. Background DB Save
+        # 5. Background DB Save (Hindi makaka-antala sa response ng user)
         threading.Thread(target=save_to_db_worker, args=(label, confidence, address)).start()
 
-        # 6. Final Response
+        # 6. Final Response kapag napatunayang niyog ito
         return jsonify({
             "status": "success",
             "variety_name": label,
@@ -143,7 +147,7 @@ def predict():
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
-    # Gamitin ang PORT environment variable para sa Render
+    # Awtomatikong kukunin ang PORT mula sa Render, default ay 1000 kung local
     port = int(os.environ.get("PORT", 1000)) 
-    print(f"🚀 TFLite AI Server starting on port {port}")
+    print(f"🚀 New TFLite AI Server starting on port {port}")
     app.run(host='0.0.0.0', port=port, debug=False)

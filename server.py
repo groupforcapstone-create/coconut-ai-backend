@@ -1,7 +1,7 @@
 import os
 # --- STEP 1: MEMORY OPTIMIZATION (MUST BE AT THE TOP) ---
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-os.environ['CUDA_VISIBLE_DEVICES'] = '-1' # Force CPU only for Render Free Tier
+os.environ['CUDA_VISIBLE_DEVICES'] = '-1'  # Force CPU only for Render Free Tier
 
 import cv2
 import numpy as np
@@ -16,8 +16,8 @@ app = Flask(__name__)
 CORS(app)
 
 # --- CONFIGURATION ---
-# Ginagamit na ang bagong convert na TFLite model file
-MODEL_PATH = "coconut_model2.tflite" 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+MODEL_PATH = os.path.join(BASE_DIR, "coconut_model2.tflite")
 IMG_SIZE = (224, 224)
 CLASS_NAMES = ["Baybay Tall Coconut", "Catigan Dwarf Coconut", "NotCoconut", "Tacunan Dwarf Coconut"]
 
